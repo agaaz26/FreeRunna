@@ -53,7 +53,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
     initial_prompt = "Introduce yourself as FreeRunna and ask the intake questions."
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         config={'system_instruction': SYSTEM_INSTRUCTION},
         contents=initial_prompt
     )
@@ -69,7 +69,7 @@ if prompt := st.chat_input("Message your coach..."):
         st.markdown(prompt)
     with st.chat_message("assistant"):
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             config={'system_instruction': SYSTEM_INSTRUCTION},
             contents=[m["content"] for m in st.session_state.messages]
         )
