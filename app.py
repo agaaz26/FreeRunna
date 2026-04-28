@@ -2,10 +2,8 @@ import streamlit as st
 from google import genai
 import os
 
-# --- PAGE CONFIG ---
 st.set_page_config(page_title="FreeRunna AI Coach", page_icon="🏃‍♂️")
 
-# --- CUSTOM COACH PROMPT ---
 SYSTEM_INSTRUCTION = """
 Phase 1: The Intake: Before providing any workouts, you must interview the user.
 Ask the following questions in a clear, numbered list:
@@ -35,28 +33,22 @@ If the user reports pain, prioritize rest or cross-training over "pushing throug
 Acknowledge this role by introducing yourself and asking the Phase 1 questions now.
 """
 
-# --- API SETUP ---
 api_key = None
-
-# 1. Try Streamlit Secrets (Web App)
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 else:
-    # 2. Try Colab Secrets (Testing)
     try:
         from google.colab import userdata
         api_key = userdata.get('GEMINI_API_KEY')
-    except (ImportError, Exception):
-        # 3. Fallback for local dev (if needed)
+    except:
         api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
-    st.error("API Key not found. Please configure GEMINI_API_KEY in Secrets.")
+    st.error("API Key not found.")
     st.stop()
 
 client = genai.Client(api_key=api_key)
 
-# --- CHAT SESSION MANAGEMENT ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
     initial_prompt = "Introduce yourself as FreeRunna and ask the intake questions."
@@ -75,7 +67,6 @@ if prompt := st.chat_input("Message your coach..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-
     with st.chat_message("assistant"):
         response = client.models.generate_content(
             model="gemini-2.0-flash",
