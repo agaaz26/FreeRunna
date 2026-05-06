@@ -1,64 +1,103 @@
 import streamlit as st
-from groq import Groq
+from google import genai
 import os
 
 st.set_page_config(page_title="FreeRunna AI Coach", page_icon="🏃‍♂️")
 
 SYSTEM_INSTRUCTION = """
 You are "FreeRunna", an expert running coach specialized in exercise science.
-Phase 1: The Intake: Interview the user with these 6 questions:
-1. Primary goal? 2. Current base mileage? 3. Recent PRs? 4. Availability? 5. Equipment? 6. Injuries?
-Phase 2: Architecture: Build a training block in a table.
-Phase 3: Weekly Check-in: Adjust based on 1-10 effort scale.
+
+Phase 1: The Intake: Before providing any workouts, you must interview the user.
+
+Get their name and ask the following questions in a clear, numbered list:
+
+1. What is your primary goal (e.g., first 5K, a Sub-4 Marathon, general fitness)?
+
+2. What is your current "base" (average weekly mileage over the last 4 weeks)?
+
+3. What are your recent PRs or "best effort" times?
+
+4. How many days a week can you commit to, and which specific days are best for your "Long Run"?
+
+5. Do you have access to a gym, hills, or a track?
+
+6. Are you currently dealing with any "niggles" or past injuries I should know about?
+
+Phase 2: The Architecture: Build a training block in a table format including:
+Day of Week | Workout Type (Easy, Interval, Tempo, Long) | Description (include perceived effort or pace targets) | Distance/Duration.
+
+The length of the training block is either determined by the user's goal, a race they have in mind, or explicitly stated by them.
+
+Phase 3: The Weekly Check-in:
+At the end of every week, ask: "How did the volume feel on a scale of 1-10?" and "Did any unexpected life events change your availability for next week?" You will then adjust the following week's plan based on their feedback.
+
+Guidelines:
+- Derive from established endurance training methodology when developing plans — balance structure with adaptability to work around the user's schedule, limitations, and level of fitness.
+- Make realistic plans: balance adaptability while making sure the user is able to reach their goals in an injury-free way.
+- Use the 10% rule for mileage increases to prevent injury.
+- If the user reports pain, prioritize rest or cross-training over pushing through.
+- Be warm, encouraging, and friendly — but always data-driven.
+- Do not reference any specific coaches, books, or commercial training programs by name.
+
+Acknowledge this role by introducing yourself, getting the user's name, and asking the Phase 1 questions now.
 """
 
-# Initialize Groq Client
-api_key = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+# API Key setup
+api_key = None
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+else:
+    try:
+        from google.colab import userdata
+        api_key = userdata.get('GEMINI_API_KEY')
+    except:
+        api_key = os.getenv("GEMINI_API_KEY")
+
 if not api_key:
-    st.error("GROQ_API_KEY not found in Streamlit Secrets.")
+    st.error("API Key not found. Please add GEMINI_API_KEY to your Streamlit Secrets.")
     st.stop()
 
-client = Groq(api_key=api_key)
+client = genai.Client(api_key=api_key)
 
+def safe_generate(contents):
+    try:
+        return client.models.generate_content(
+            model="gemini-2.5-flash",
+            config={'system_instruction': SYSTEM_INSTRUCTION},
+            contents=contents
+        )
+    except Exception as e:
+        if "429" in str(e):
+            st.warning("Coach is taking a quick breather (Rate Limit). Please wait 30 seconds and try again.")
+        else:
+            st.error(f"Error: {e}")
+        return None
+
+# Initial introduction
 if "messages" not in st.session_state:
     st.session_state.messages = []
-    # Initial Call to introduce the coach
-    try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": SYSTEM_INSTRUCTION},
-                {"role": "user", "content": "Introduce yourself and ask the intake questions."}
-            ]
-        )
-        st.session_state.messages.append({"role": "assistant", "content": completion.choices[0].message.content})
-    except Exception as e:
-        st.error(f"Groq Error: {e}")
+    with st.spinner("Calling FreeRunna..."):
+        response = safe_generate("Introduce yourself, ask for the user's name, and then ask the intake questions.")
+        if response:
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
 
-# Display Chat
+# Display chat history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# User Input
+# Handle user input
 if prompt := st.chat_input("Message your coach..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        try:
-            # Prepare full conversation history for the AI
-            history = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
-            for m in st.session_state.messages:
-                history.append({"role": m["role"], "content": m["content"]})
-
-            completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=history
-            )
-            response_text = completion.choices[0].message.content
-            st.markdown(response_text)
-            st.session_state.messages.append({"role": "assistant", "content": response_text})
-        except Exception as e:
-            st.error(f"Error: {e}")
+        with st.spinner("Thinking..."):
+            response = safe_generate([m["content"] for m in st.session_state.messages])
+            if response:
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            else:
+                if st.button("Retry Message"):
+                    st.rerun()
