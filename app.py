@@ -62,7 +62,7 @@ client = genai.Client(api_key=api_key)
 def safe_generate(contents):
     try:
         return client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             config={'system_instruction': SYSTEM_INSTRUCTION},
             contents=contents
         )
